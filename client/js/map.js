@@ -6,13 +6,18 @@ var postpopup;
 var markersDict = {};
 var firstload = true;
 var mapTileProvider = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+var L=null;
 
-function getAndPopulateMap(geohash, posttrxid) {
+async function getAndPopulateMap(geohash, posttrxid) {
 
     geohash = san(geohash);
     posttrxid = san(posttrxid);
 
     if (map == null) {
+
+        if(!L){
+            await loadScript("js/lib/leaflet/leaflet.js");
+        }
 
         map = L.map('map', { attributionControl: false });
 
@@ -118,8 +123,8 @@ function onMapClick(e) {
 function loadLocationListFromServerAndPlaceOnMap(event) {
 
     var mapBounds = map.getBounds();
-    var url = dropdowns.contentserver + '?action=map&address=' + pubkey + "&north=" + mapBounds.getNorthEast().lat + "&east=" + mapBounds.getNorthEast().lng + "&south=" + mapBounds.getSouthWest().lat + "&west=" + mapBounds.getSouthWest().lng;
-    getJSON(url).then(function (data) {
+    var theURL = dropdowns.contentserver + '?action=map&address=' + pubkey + "&north=" + mapBounds.getNorthEast().lat + "&east=" + mapBounds.getNorthEast().lng + "&south=" + mapBounds.getSouthWest().lat + "&west=" + mapBounds.getSouthWest().lng;
+    getJSON(theURL).then(function (data) {
         var contents = "";
         for (var i = 0; i < data.length; i++) {
             var pageName = san(data[i].txid);
@@ -135,8 +140,7 @@ function loadLocationListFromServerAndPlaceOnMap(event) {
             }
         }
     }, function (status) { //error detection....
-        console.log('Something is wrong:' + status);
-        updateStatus(status);
+        showErrorMessage(status, null, theURL);
     });
-
 }
+

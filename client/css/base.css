@@ -270,6 +270,9 @@ select>option {
     font-size: x-small;
     color: #373737;
   }
+
+}
+
   /* Breakline in header for small screen, 720 is about the point where it splits onto a second line
   probably a better way to handle this as topic container is still free floating and unwanted break appears*/
   @media only screen and (max-width: 860px) {
@@ -277,13 +280,16 @@ select>option {
       content: ' ';
       display: block;
     }
+    .memberlogoimagefull {display:none;}
+    .memberlogoimage {display:inline;}
   }
   @media only screen and (min-width: 860px) {
     .separatorwidebreakpoint::before {
       content: " | ";
     }
+    .memberlogoimagefull {display:inline;}
+    .memberlogoimage {display:none;}
   }
-}
 
 /* Footer Stuff */
 
@@ -358,6 +364,10 @@ footer {
     margin-bottom: 1px;
     color: var(--titletext);
   }
+  .title p {
+    margin-top: 0px;
+  }
+
   .post {
     min-height: 55px;
   }
@@ -385,6 +395,16 @@ footer {
     float: left;
     font-size: 1px;
   }
+  .memberpicturesmall {
+    width: 15px;
+    height: 15px;
+    margin-bottom: -3px;
+    margin-right: 2px;
+  }
+  .memberpicturelarge {
+    width: 640px;
+    height: 640px;
+  }
   .jdenticon {
     width: 15px;
     height: 15px;
@@ -395,7 +415,19 @@ footer {
     width: 100px;
     height: 100px;
   }
-
+  .starrating {
+    display: inline;
+  }
+  .memberfilter {
+    display: inline;
+    font-size: inherit;
+  }
+  .remembersinactive {
+    cursor: default;
+  }
+  .remembersinactive a:hover {
+    text-decoration: none;
+  }
 }
 
 /*Vote buttons*/
@@ -405,13 +437,13 @@ footer {
     display: none;
   }
   .votearrow {
-    background: url("../img/uparrowgrey.svg");
+    background: url("../img/membertheme/uparrowgrey.svg");
   }
   .votearrowactivated {
-    background: url("../img/uparrowgreen.svg");
+    background: url("../img/membertheme/uparrowgreen.svg");
   }
   .votearrowactivateddown {
-    background: url("../img/uparrowblue.svg");
+    background: url("../img/membertheme/uparrowblue.svg");
   }
   .votearrow, .votearrowactivated, .votearrowactivateddown {
     width: 18px;
@@ -561,6 +593,10 @@ footer {
     li li li li li li li li li li li li li li {
       background-color: var(--libgcolor2n);
     }
+    .collapsed {
+      margin-left: 34px !important;
+    }
+
   }
   /* Smaller Screen */
   @media only screen and (max-width: 600px) {
@@ -593,6 +629,9 @@ footer {
       padding-left: 0px;
       padding-right: 0px;
     }
+    .collapsed {
+      margin-left: 28px !important;
+    }
   }
   /*comment body - override list stuff*/
   .commentbody li {
@@ -624,6 +663,7 @@ footer {
     list-style-type: lower-latin;
     margin-left: 15px;
   }
+
 }
 
 /* Main Reply */
@@ -749,7 +789,7 @@ footer {
 /*Loading image*/
 
 .loading {
-  background-image: url("../img/loading.gif");
+  background-image: url("../img/membertheme/loading.gif");
   width: 100%;
   /*width of your image*/
   height: 72px;
@@ -838,6 +878,11 @@ li.notificationpage::before {
   content: "📣";
 }
 
+li.notificationrepost::before {
+  content: "🔗";
+}
+
+
 .notificationtitle {
   font-size: medium;
   font-weight: normal;
@@ -868,7 +913,7 @@ li.notificationpage::before {
   font-size: small;
 }
 
-.member, .ratings, .trustgraph, .community, .followers, .following, .blockers, .blocking {
+.member, .anchorratings, .trustgraph, .community, .followers, .following, .blockers, .blocking {
   font-size: small;
 }
 
@@ -938,4 +983,130 @@ textarea, .memorandumtitle, .memotopic, .memorandumtopic {
 
 .tltopicname {
   word-wrap: anywhere;
+}
+
+/*Article Mode*/
+
+.article .fatitem {
+  text-rendering: optimizeLegibility;
+  color: rgba(0, 0, 0, 0.8);
+  font-style: normal;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  font-weight: 400;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
+}
+
+.article .fatitem .title, .article .title a {
+  line-height: 48px;
+  font-size: 40px;
+  font-family: Georgia, Cambria, "Times New Roman", Times, serif;
+  color: rgba(0, 0, 0, 0.84);
+  margin: 0;
+  letter-spacing: 0px;
+}
+
+.article .mainbody {
+  flex-direction: column;
+  max-width: 728px;
+  margin-right: auto;
+  margin-left: auto;
+  padding-right: 24px;
+  padding-left: 24px;
+  box-sizing: border-box;
+  width: 100%;
+  display: flex;
+}
+
+.article .itemlist {
+  margin-top: 30px;
+}
+
+.article .fatitem .votelinks {
+  display: none;
+}
+
+.article .fatitem .commentbody {
+  background-color: #ffffff;
+  border: 0px;
+  border-radius: 0px;
+  padding: 0px 0px;
+}
+
+.article .fatitem .comment {
+  margin-top: 0.86em;
+  font-size: 21px;
+  margin-bottom: -0.46em;
+  font-family: Georgia, Cambria, "Times New Roman", Times, serif;
+  letter-spacing: -0.004em;
+  line-height: 1.58;
+  color: rgba(0, 0, 0, 0.84);
+  margin: 0;
+}
+
+.article header {
+  display: none;
+}
+
+/*Article Editor Stuff*/
+
+.article .newpost {
+  width: 100%;
+}
+
+.article .memoarea {
+  display: none;
+}
+
+.article .switchToArticleMode {
+  display: none;
+}
+
+.article .switchToRegularMode {
+  display: block;
+}
+
+.article .commentbody img {
+  margin-top: 5px;
+  margin-bottom: 5px;
+  max-width: 100%;
+  vertical-align: top;
+  display: block;
+  margin: 0 auto;
+}
+
+.article p {
+  margin-top: 15px;
+  margin-bottom: 15px;
+}
+
+.article .permalink {
+  display: none;
+}
+
+.profilepreview {
+  position: absolute;
+background: var(--bodybgcolor);
+border: 1px solid var(--preformattedborder);
+border-radius: 0.5rem;
+padding: 1rem;
+z-index: 99;
+width: 400px;
+box-shadow: 0 14px 28px rgba(0, 0, 0, 0.25), 0 10px 10px rgba(0, 0, 0, 0.22);
+}
+
+.scoreexpanded .tipdetails {
+  display: -ms-flexbox;
+  display: flex;
+  -ms-flex-align: center;
+  align-items: center;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.12);
+  margin: 0.5rem 0;
+}
+
+.quotepost{
+  border: 1px solid var(--preformattedborder);
+  border-radius: 10px;
+  padding: 10px;
+  margin: 5px;
 }

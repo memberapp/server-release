@@ -3,7 +3,6 @@
 const DUSTLIMIT = 546;
 const MAXPOSSNUMBEROFINPUTS = 10;
 const Buffer = buffer.Buffer;
-const BITBOX = bitboxSdk;
 
 //Note, these can be overwritten in config.js
 //let utxoServer = "https://rest.bitcoin.com/v2/";
@@ -13,22 +12,26 @@ const BITBOX = bitboxSdk;
 let extraSatoshis = 5;
 let miningFeeMultiplier = 1;
 
+var resendWait = 2000;
+
 //For BCHDRPC
 //let trxserver = "bchdgrpc";
 //let bchrpcClient = window.bchrpcClient;
 
 class UTXOPool {
 
-  constructor(address, statusMessageFunction, storageObject, onscreenElementName) {
+  constructor(address, qaddress, statusMessageFunction, storageObject, onscreenElementName) {
     //This takes legacy address format
     this.theAddress = address;
+    this.theQAddress = qaddress;
+
     this.utxoPool = {};
     this.statusMessageFunction = statusMessageFunction;
     this.storageObject = storageObject;
 
     //these two are a bit hacky and break encapsulation
     this.onscreenElementName = onscreenElementName;
-    this.showwarning=true;
+    this.showwarning = true;
 
     //Try to retrieve utxopool from localstorage and set balance
     try {
@@ -80,6 +83,14 @@ class UTXOPool {
     return true;
   }
 
+  getBalance() {
+    var total = 0;
+    for (let i = 0; i < this.utxoPool.length; i++) {
+      total = total + this.utxoPool[i].satoshis;
+    }
+    return total;
+  }
+
   updateBalance() {
 
     try {
@@ -89,23 +100,23 @@ class UTXOPool {
     } catch (err) {
     }
 
-    var total = 0;
-    for (let i = 0; i < this.utxoPool.length; i++) {
-      total = total + this.utxoPool[i].satoshis;
-    }
+    var total = this.getBalance();
 
-    //var balString=(Math.floor(total/1000)).toLocaleString()+"<span class='sats'>"+(total%1000)+"</span>";
+
     if (this.onscreenElementName != null) {
       document.getElementById(this.onscreenElementName).innerHTML = balanceString(total, true);
 
       document.getElementById('satoshiamount').innerHTML = total;
-        
-      if (total < 2000 && this.showwarning==true) {
+
+      if (total < 2000 && this.showwarning == true) {
         document.getElementById('lowfundswarning').style.display = 'block';
         showQRCode('lowfundsaddress', 100);
         //only show this message once per app load
-        this.showwarning=false;
-      } 
+        this.showwarning = false;
+      }
+      if (total >= 2000) {
+        document.getElementById('lowfundswarning').style.display = 'none';
+      }
     }
 
     return total;
@@ -114,27 +125,13 @@ class UTXOPool {
   refreshPool() {
 
     let outputInfo = new Array();
-
-    //Create Keypair
-    //const ECPair = BITBOX.ECPair;
-    //let keyPair = new ECPair().fromWIF(options.cash.key);
-    //let thePublicKey = keyPair.getAddress();// BITBOX.ECPair.toLegacyAddress(keyPair);
-    //
-    //
-
-
-
-    //Get the cashAddr format
-    //const Address2 = bch.Address;
-    //let thePublicKeyQFormat = new Address2(this.theAddress).toString(bch.Address.CashAddrFormat);
-    let thePublicKeyQFormat = new BITBOX.Address().toCashAddress(this.theAddress);
-
-    const Address = BITBOX.Address;
+    
+    const Address = bitboxSdk.Address;
     let address = new Address();
     address.restURL = dropdowns.utxoserver;
 
     (async () => {
-      outputInfo = await address.utxo(thePublicKeyQFormat);
+      outputInfo = await address.utxo(this.theQAddress);
 
 
       //console.log(outputInfo);
@@ -156,7 +153,7 @@ class UTXOPool {
         }
       }
       let usableUTXOScount = utxos.length;
-      this.updateStatus("Received " + utxosOriginalNumber + " utxo(s) of which " + usableUTXOScount + " are usable.");
+      this.updateStatus(utxosOriginalNumber + getSafeTranslation('utxosreceived', " utxo(s) received. usable") + ' ' + usableUTXOScount);
       this.utxoPool = utxos;
       this.updateBalance();
     })();
@@ -201,8 +198,8 @@ class TransactionQueue {
     this.utxopools = {};
   }
 
-  addUTXOPool(address, storageObject, onscreenElementName) {
-    this.utxopools[address] = new UTXOPool(address, this.statusMessageFunction, storageObject, onscreenElementName);
+  addUTXOPool(address, qaddress, storageObject, onscreenElementName) {
+    this.utxopools[address] = new UTXOPool(address, qaddress, this.statusMessageFunction, storageObject, onscreenElementName);
     //This is used to display this UTXOPool balance on screen
     /*if(onscreenElementName!=null){
       this.utxopools[address].onscreenElementName=onscreenElementName;
@@ -259,41 +256,19 @@ class TransactionQueue {
 
     returnObject.isSending = false;
     if (err) {
-      console.log(err);
+      console.log(err.code + " " + err.message);
       let errorMessage = err.message;
-      returnObject.updateStatus("Error:" + errorMessage);
+      returnObject.updateStatus(getSafeTranslation('error', "Error:") + err.code + " " + errorMessage);
       if (errorMessage === undefined) {
-        errorMessage = "Network Error";
+        errorMessage = getSafeTranslation('networkerror', "Network Error");
       }
 
       if (errorMessage.startsWith("64")) {
-        //Error:258: txn-mempool-conflict 
-        returnObject.updateStatus(errorMessage + " (" + returnObject.queue.length + " .Transaction(s) Still Queued. Waiting for new block, Retry in 60 seconds)");
+        //Error:64: 
+        //May mean not enough mining fee was provided or chained trx limit reached 
+        returnObject.updateStatus(errorMessage + " (" + returnObject.queue.length + " " + getSafeTranslation('transactionstillqueued', "Transaction(s) Still Queued. Waiting for new block, Retry in 60 seconds)"));
         await sleep(60000);
-        returnObject.updateStatus("Sending Again . . .");
-        await sleep(1000);
-        returnObject.sendNextTransaction();
-        return;
-      }
-
-      if (errorMessage.startsWith("1001")) {
-        //1001 No UTXOs 
-        returnObject.updateStatus(errorMessage + " (" + returnObject.queue.length + " .Transaction(s) Still Queued. Retry in 60 seconds)");
-        await sleep(60000);
-        returnObject.updateStatus("Sending Again . . .");
-        await sleep(1000);
-        returnObject.sendNextTransaction();
-        return;
-      }
-
-
-      if (errorMessage.startsWith("Network Error") || errorMessage.startsWith("258") || errorMessage.startsWith("200")) { //covers 2000, 2001
-        //Error:258: txn-mempool-conflict 
-        //2000, all fetched UTXOs already spend
-        //2001, insuffiencent funds from unspent UTXOs. Add funds
-        returnObject.updateStatus(errorMessage + " (" + returnObject.queue.length + " Transaction(s) Still Queued, Retry in 5 seconds)");
-        await sleep(4000);
-        returnObject.updateStatus("Sending Again . . .");
+        returnObject.updateStatus(getSafeTranslation('sending again', "Sending Again . . ."));
         await sleep(1000);
         returnObject.sendNextTransaction();
         return;
@@ -301,7 +276,7 @@ class TransactionQueue {
 
       if (errorMessage.startsWith("1000")) { //Covers 1000
         //1000 No Private Key
-        returnObject.updateStatus(errorMessage + " Removing Transaction From Queue.");
+        returnObject.updateStatus(errorMessage + " " + getSafeTranslation('removefromqueue', "Removing Transaction From Queue."));
         returnObject.onSuccessFunctionQueue.shift();
         returnObject.queue.shift();
         returnObject.sendNextTransaction();
@@ -312,18 +287,44 @@ class TransactionQueue {
         if (miningFeeMultiplier < maxfee) {
           //Insufficient Priority - not enough transaction fee provided. Let's try increasing fee.
           miningFeeMultiplier = miningFeeMultiplier * 1.1;
-          returnObject.updateStatus("Error: Transaction rejected because fee too low. Increasing and retrying. Surge Pricing now " + Math.round(miningFeeMultiplier * 10) / 10);
+          returnObject.updateStatus(getSafeTranslation('surgepricing', "Error: Transaction rejected because fee too low. Increasing and retrying. Surge Pricing now ") + Math.round(miningFeeMultiplier * 10) / 10);
           await sleep(1000);
           returnObject.sendNextTransaction();
           return;
         }
       }
-      alert("There was an error processing the transaction required for this action. Make sure you have sufficient funds in your account and try again. Error:" + errorMessage);
-      return;
-    }
 
+      //if (errorMessage.startsWith("Network Error") || errorMessage.startsWith("1001") || errorMessage.startsWith("258") || errorMessage.startsWith("200")) { //covers 2000, 2001
+      //1001 No UTXOs
+      //Error:258: txn-mempool-conflict 
+      //2000, all fetched UTXOs already spend
+      //2001, insuffiencent funds from unspent UTXOs. Add funds
+
+      returnObject.updateStatus(errorMessage + " " + returnObject.queue.length + getSafeTranslation('stillqueued', " Transaction(s) Still Queued, Try changing UTXO server on settings page. Retry in (seconds)") + " " + (resendWait / 1000));
+      await sleep(resendWait);
+      resendWait = resendWait * 1.5;
+      try {
+        //Try refreshing the utxo pool
+        const ECPair = bitboxSdk.ECPair;
+        let keyPair = new ECPair().fromWIF(returnObject.queue[0].cash.key);
+        let theAddress = keyPair.getAddress();
+        returnObject.utxopools[theAddress].refreshPool();
+      } catch (err) {
+        returnObject.updateStatus(err);
+        console.log(err);
+      }
+      await sleep(1000);
+      returnObject.updateStatus(getSafeTranslation('sendingagain', "Sending Again . . ."));
+      await sleep(1000);
+      returnObject.sendNextTransaction();
+      return;
+      //}
+      //alert("There was an error processing the transaction required for this action. Make sure you have sufficient funds in your account and try again. Error:" + errorMessage);
+      //return;
+    }
+    resendWait = 2000;
     if (res.length > 10) {
-      returnObject.updateStatus("<a  rel='noopener noreferrer' target='blockchair' href='https://blockchair.com/bitcoin-cash/transaction/" + res + "'>txid:" + res + "</a>");
+      returnObject.updateStatus("<a  rel='noopener noreferrer' target='blockchair' href='https://blockchair.com/bitcoin-cash/transaction/" + san(res) + "'>txid:" + san(res) + "</a>");
       //console.log("https://blockchair.com/bitcoin-cash/transaction/" + res);
       let successCallback = returnObject.onSuccessFunctionQueue.shift();
       returnObject.queue.shift();
@@ -341,7 +342,7 @@ class TransactionQueue {
   async memberBoxSend(options, callback, returnObject) {
 
     if (!options.cash || !options.cash.key) {
-      callback(new Error("1000:No Private Key, Cannot Make Transaction"), null, this);
+      callback(new Error(getSafeTranslation('noprivatekey', "1000:No Private Key, Cannot Make Transaction")), null, this);
       return;
     }
 
@@ -370,56 +371,22 @@ class TransactionQueue {
   }
 
   selectUTXOs(options) {
-    // return new Promise(resolve => {
-    /*const ECPair = BITBOX.ECPair;
-    const Address = BITBOX.Address;
-
-    //Create Keypair
-    let keyPair = new ECPair().fromWIF(options.cash.key);
-    let thePublicKey = keyPair.getAddress();// BITBOX.ECPair.toLegacyAddress(keyPair);
-    const Address2 = bch.Address;
-    let thePublicKeyQFormat = new Address2(thePublicKey).toString(bch.Address.CashAddrFormat);
-
-    let outputInfo = new Array();
-    let address = new Address();*/
-
-    //(async () => {
-    //address.restURL = utxoServer;
-    //outputInfo = await address.utxo(thePublicKeyQFormat);
-    const ECPair = BITBOX.ECPair;
+    
+    const ECPair = bitboxSdk.ECPair;
     let keyPair = new ECPair().fromWIF(options.cash.key);
     let theAddress = keyPair.getAddress();
 
     //If we're not maintaining a utxopool, create one
     if (this.utxopools[theAddress] == null) {
+      var theQAddress = new bitboxSdk.Address().toCashAddress(theAddress);
       //This makes a server request so may take some time to return
-      this.addUTXOPool(theAddress);
+      this.addUTXOPool(theAddress,theQAddress);
     }
 
     let utxos = this.utxopools[theAddress].getUTXOs();
 
-    /*
-    //console.log(outputInfo);
-    //let utxos = outputInfo.utxos;
-    let utxosOriginalNumber = utxos.length;
-
-    //Check no unexpected data in the fields we care about
-    for (let i = 0; i < utxos.length; i++) {
-      utxos[i].satoshis = Number(utxos[i].satoshis);
-      utxos[i].vout = Number(utxos[i].vout);
-      utxos[i].txid = sanitizeAlphanumeric(utxos[i].txid);
-    }
-
-    //Remove any utxos with less or equal to dust limit, they may be SLP tokens
-    for (let i = 0; i < utxos.length; i++) {
-      if (utxos[i].satoshis <= DUSTLIMIT) {
-        utxos.splice(i, 1);
-        i--;
-      }
-    }
-*/
     if (utxos.length == 0) {
-      throw new Error("1001:Insufficient Funds (No Suitable UTXOs)");
+      throw new Error(getSafeTranslation('insufficientfunds', "1001:Insufficient Funds (No Suitable UTXOs)"));
     }
 
     let usableUTXOScount = utxos.length;
@@ -454,9 +421,9 @@ class TransactionQueue {
     }
     //If we exit here because utxo.length is 0, we're trying sending with all the utxos even though our ballpark figure hasn't been reached
     utxos = useUtxos;
-    this.updateStatus("Pool has " + usableUTXOScount + " utxo(s). Using " + utxos.length);
+    this.updateStatus(usableUTXOScount + getSafeTranslation('utxosinpool', " utxo(s) in pool. Using ") + utxos.length);
     if (utxos.length == 0) {
-      throw new Error("2000:All UTXOs are already spent");
+      throw new Error(getSafeTranslation('alreadyspent', "2000:All UTXOs are already spent"));
     }
 
     return utxos;
@@ -471,25 +438,16 @@ class TransactionQueue {
 
   constructTransaction(utxos, fees, options) {
 
-    const TransactionBuilder = BITBOX.TransactionBuilder;
-    const Script = BITBOX.Script;
+    const TransactionBuilder = bitboxSdk.TransactionBuilder;
+    const Script = bitboxSdk.Script;
 
-    const ECPair = BITBOX.ECPair;
+    const ECPair = bitboxSdk.ECPair;
     let keyPair = new ECPair().fromWIF(options.cash.key);
     let changeAddress = keyPair.getAddress();
-
-    //let keyPair = new ECPair().fromWIF(options.cash.key);
-    //let thePublicKey = keyPair.getAddress();// BITBOX.ECPair.toLegacyAddress(keyPair);
-
-    //let maxNumberOfInputs = utxos.length < MAXPOSSNUMBEROFINPUTS ? utxos.length : MAXPOSSNUMBEROFINPUTS;
-
 
     let script = new Script();
     let scriptArray = this._script(script.opcodes.OP_RETURN, options);
     let script2 = script.encode(scriptArray);
-    //[script.opcodes.OP_RETURN, Buffer.from(options.data[0], 'hex'), Buffer.from(options.data[1])]);
-
-
 
     //ESTIMATE TRX FEE REQUIRED
     let changeAmount = 0;
@@ -531,7 +489,7 @@ class TransactionQueue {
     changeAmount = fundsRemaining - fees;
 
     if (changeAmount < 0) {
-      throw new Error("2001: Insufficient Funds. Amount available " + utxoFunds + " in " + utxos.length + " UTXOs but " + (transactionOutputTotal + fees) + " required. Add Funds.");
+      throw new Error(getSafeTranslation('insufficientfunds', "2001: Insufficient Funds.") + utxoFunds + " " + getSafeTranslation('availableamount', "available but required amount is") + " " + (transactionOutputTotal + fees));
     }
 
     var hasChange = false;
@@ -562,7 +520,7 @@ class TransactionQueue {
     let hash = tx.getHash().toString('hex');
     let id = tx.getId();
 
-    const RawTransactions = BITBOX.RawTransactions;
+    const RawTransactions = bitboxSdk.RawTransactions;
     let rawtransactions = new RawTransactions();
     rawtransactions.restURL = dropdowns.txbroadcastserver;
     rawtransactions.sendRawTransaction(hex).then((result) => {
@@ -577,14 +535,14 @@ class TransactionQueue {
       //Remove unexpected input in error message
       err.message = sanitizeAlphanumeric(err.error);
       if (err.message === undefined || err.message == "") {
-        err.message = "Network Error";
+        err.message = getSafeTranslation('networkerror', "Network Error");
       }
       callback(err, null, this);
     });
   }
 
   updateTransactionPool(utxos, options, tx) {
-    const ECPair = BITBOX.ECPair;
+    const ECPair = bitboxSdk.ECPair;
     let keyPair = new ECPair().fromWIF(options.cash.key);
     let changeAddress = keyPair.getAddress();
 
@@ -606,8 +564,12 @@ class TransactionQueue {
     theUTXOPool.updateBalance();
   }
 
-  updateBalance(address){
+  updateBalance(address) {
     return this.utxopools[address].updateBalance();
+  }
+
+  getBalance(address) {
+    return this.utxopools[address].getBalance();
   }
 
 }

@@ -2,24 +2,49 @@
 
 function displayContentBasedOnURLParameters() {
 
+    
+    if (backForwardEvent) {
+        window.scrollTo(0, scrollhistory[window.location.hash]);
+    } else {
+        window.scrollTo(0, 0);
+    }
+
     //Careful with input here . . . comes from URL so can contain any characters, so we want to sanitize it before using.
+
+    var path = window.location.pathname;
 
     var url = window.location.href;
 
     var action;
 
-    if(url.indexOf('#')==-1){
-        //navigation back to home page, clear topic
-        setTopic("");
-        action="";
-    }else{
+    if (url.indexOf('#') != -1) {
         action = sanitizeAlphanumeric(url.substring(url.indexOf('#') + 1).toLowerCase());
+        //navigation back to home page, clear topic
+
+    } else if (url.indexOf('/p/') != -1) {
+        var postid = sanitizeAlphanumeric(url.substr(url.indexOf('/p/') + 3, 10).toLowerCase().trim());
+        showThread(sanitizeAlphanumeric(postid), sanitizeAlphanumeric(postid), 'thread');
+        return;
+    } else if (url.indexOf('/a/') != -1) {
+        var postid = sanitizeAlphanumeric(url.substr(url.indexOf('/a/') + 3, 10).toLowerCase().trim());
+        showThread(sanitizeAlphanumeric(postid), sanitizeAlphanumeric(postid), 'article');
+        return;
+    } else if (url.indexOf('/m/') != -1) {
+        var pagingidHOSTILE = decodeURI(url.substring(url.indexOf('/m/') + 3).replace('@', '').toLowerCase()).trim();
+        showMember('', pagingidHOSTILE);
+        return;
+    } else if (url.indexOf('/t/') != -1) {
+        var topicnameHOSTILE = decodeURI(url.substring(url.indexOf('/t/') + 3).toLowerCase()).trim();
+        showTopic(0, numbers.results, topicnameHOSTILE);
+        return;
+    } else {
+        setTopic("");
+        action = "";
     }
 
     if (action.startsWith("show")) {
         setOrder('orderselector', getParameterByName("order"));
         setOrder('contentselector', getParameterByName("content"));
-        setTopic(getParameterByName("topicname"));
         setOrder('filterselector', getParameterByName("filter"));
 
         showPostsNew(
@@ -29,13 +54,15 @@ function displayContentBasedOnURLParameters() {
             sanitizeAlphanumeric(getParameterByName("filter")),
             Number(getParameterByName("start")),
             Number(getParameterByName("limit")),
+            sanitizeAlphanumeric(getParameterByName("qaddress"))
         );
+        setTopic(getParameterByName("topicname"));
     } else if (action.startsWith("memberposts")) {
         showMemberPosts(Number(getParameterByName("start")), Number(getParameterByName("limit")), sanitizeAlphanumeric(getParameterByName("qaddress")));
     } else if (action.startsWith("notifications")) {
-        showNotifications(Number(getParameterByName("start")), Number(getParameterByName("limit")), sanitizeAlphanumeric(getParameterByName("qaddress")));
+        showNotifications(Number(getParameterByName("start")), Number(getParameterByName("limit")), sanitizeAlphanumeric(getParameterByName("qaddress")), sanitizeAlphanumeric(getParameterByName("txid")));
     } else if (action.startsWith("member")) {
-        showMember(sanitizeAlphanumeric(getParameterByName("qaddress")));
+        showMember(sanitizeAlphanumeric(getParameterByName("qaddress")), getParameterByName("pagingid"));
     } else if (action.startsWith("followers")) {
         showFollowers(sanitizeAlphanumeric(getParameterByName("qaddress")));
     } else if (action.startsWith("following")) {
@@ -46,8 +73,6 @@ function displayContentBasedOnURLParameters() {
         showBlocking(sanitizeAlphanumeric(getParameterByName("qaddress")));
     } else if (action.startsWith("ratings")) {
         showRatings(sanitizeAlphanumeric(getParameterByName("qaddress")));
-    } else if (action.startsWith("bootstrap")) {
-        showBootstrap(sanitizeAlphanumeric(pubkey));
     } else if (action.startsWith("posts")) {
         showPosts(Number(getParameterByName("start")), Number(getParameterByName("limit")), sanitizeAlphanumeric(getParameterByName("type")));
     } else if (action.startsWith("feed")) {
@@ -62,16 +87,16 @@ function displayContentBasedOnURLParameters() {
         //Warning - topicname may contain special characters
         showTopic(Number(getParameterByName("start")), Number(getParameterByName("limit")), getParameterByName("topicname"), sanitizeAlphanumeric(getParameterByName("type")));
     } else if (action.startsWith("article")) {
-        showThread(sanitizeAlphanumeric(getParameterByName("root")), sanitizeAlphanumeric(getParameterByName("post")), true);
+        showThread(sanitizeAlphanumeric(getParameterByName("root")), sanitizeAlphanumeric(getParameterByName("post")), 'article');
     } else if (action.startsWith("thread")) {
-        showThread(sanitizeAlphanumeric(getParameterByName("root")), sanitizeAlphanumeric(getParameterByName("post")), false);
+        showThread(sanitizeAlphanumeric(getParameterByName("root")), sanitizeAlphanumeric(getParameterByName("post")), 'thread');
     } else if (action.startsWith("settings")) {
         showSettings();
     } else if (action.startsWith("messages")) {
         showMessages();
-    } 
+    }
     else if (action.startsWith("new")) {
-        showNewPost();
+        showNewPost(sanitizeAlphanumeric(getParameterByName("txid")));
     } else if (action.startsWith("map")) {
         showMap(sanitizeAlphanumeric(getParameterByName("geohash")), sanitizeAlphanumeric(getParameterByName("post")));
     } else if (action.startsWith("myfeed")) {
@@ -90,7 +115,7 @@ function displayContentBasedOnURLParameters() {
 }
 
 function hideAll() {
-    setAddonStyle("none.css");
+    switchToRegularMode();
     document.getElementById('feed').style.display = "none";
     document.getElementById('posts').style.display = "none";
     document.getElementById('comments').style.display = "none";
@@ -111,22 +136,30 @@ function hideAll() {
     document.getElementById('following').style.display = "none";
     document.getElementById('blockers').style.display = "none";
     document.getElementById('blocking').style.display = "none";
-    document.getElementById('member').style.display = "none";
+    document.getElementById('memberanchor').style.display = "none";
     document.getElementById('newpost').style.display = "none";
-    document.getElementById('ratings').style.display = "none";
+    document.getElementById('anchorratings').style.display = "none";
     document.getElementById('map').style.display = "none";
     document.getElementById('trustgraph').style.display = "none";
-    document.getElementById('bootstrap').style.display = "none";
     document.getElementById('community').style.display = "none";
     document.getElementById('topiclistanchor').style.display = "none";
     document.getElementById('toolsanchor').style.display = "none";
     document.getElementById('messagesanchor').style.display = "none";
+    document.getElementById('topicmeta').style.display = "none";
 
 }
 
 function show(theDiv) {
     hideAll();
     document.getElementById(theDiv).style.display = "block";
+}
+
+function showOnly(theDiv) {
+    document.getElementById(theDiv).style.display = "block";
+}
+
+function hide(theDiv) {
+    document.getElementById(theDiv).style.display = "none";
 }
 
 function showTools() {
@@ -150,17 +183,12 @@ function hideMap() {
 }
 
 function showRatings(qaddress) {
-    show("ratings");
+    show('anchorratings');
     getAndPopulateRatings(qaddress);
-    document.getElementById('ratings').style.display = "block";
+    document.getElementById('anchorratings').style.display = "block";
 }
 
-function showBootstrap(qaddress) {
-    show("bootstrap");
-    getAndPopulateBootstrap(qaddress);
-}
-
-function showNewPost() {
+function showNewPost(txid) {
     show("newpost");
     document.getElementById('memorandumpreview').innerHTML = "";
     let topicNameHOSTILE = getCurrentTopicHOSTILE();
@@ -178,46 +206,84 @@ function showNewPost() {
     //topictitleChanged("memo");
     //document.getElementById('newpostbutton').style.display = "block";
 
-    //Markdown editor doesn't seem to work well on Android
-    var ua = navigator.userAgent.toLowerCase();
-    var isAndroid = ua.indexOf("android") > -1;
-    if (!isAndroid) {
-        initMarkdownEditor();
+    if (txid) {
+        getAndPopulateQuoteBox(txid);
+        
+        document.getElementById('quotetxid').value = txid;
+        document.getElementById('memorandumtextarea').style.display = 'none';
+        document.getElementById('memorandumtextbutton').style.display = 'none';
+
+    } else {
+        document.getElementById('quotetxid').value = '';
+        document.getElementById('quotepost').style.display = 'none';
+        document.getElementById('memorandumtextarea').style.display = 'none';
+        document.getElementById('memorandumtextbutton').style.display = 'block';
+
+        //Markdown editor doesn't seem to work well on Android
+        var ua = navigator.userAgent.toLowerCase();
+        var isAndroid = ua.indexOf("android") > -1;
+        if (!isAndroid) {
+            initMarkdownEditor();
+        }
     }
 }
 
 
-function showNotifications(start, limit) {
+function showNotifications(start, limit, qaddress, txid) {
 
     if (pubkey == "" || pubkey == null || pubkey == undefined) {
         showPosts(0, numbers.results, 'all');
         return;
     }
 
-    getAndPopulateNotifications(start, limit, "notifications", pubkey);
+    getAndPopulateNotifications(start, limit, "notifications", pubkey, txid);
 
 }
 
 function showSettings() {
     //Need to be logged in
-    if (pubkey == "" || pubkey == null || pubkey == undefined) {
+    /*if (pubkey == "" || pubkey == null || pubkey == undefined) {
         showPosts(0, numbers.results, 'all');
         return;
-    }
+    }*/
+    hideAll();
+    show('settingsanchor');
     getAndPopulateSettings();
-    getAndPopulate(0, numbers.results, 'memberposts', pubkey);
-    document.getElementById('settingsanchor').style.display = "block";
-    document.getElementById('settingsfollow').style.display = "block";
+    //getAndPopulate(0, numbers.results, 'memberposts', pubkey);
+
 }
 
-function showMember(qaddress) {
+function showMember(qaddress, pagingIDHOSTILE) {
+    //if pagingidhostile is not empty - await qaddress
+    if (!typeof headeraddress === 'undefined') {
+        qaddress = headeraddress;
+        headeraddress = undefined;
+    }
+
+    if (qaddress == '' && pagingIDHOSTILE != '') {
+        var theURL = dropdowns.contentserver + '?action=resolvepagingid&pagingid=' + encodeURIComponent(pagingIDHOSTILE) + '&address=' + pubkey;
+        getJSON(theURL).then(function (data) {
+            if (data && data.length > 0) {
+                qaddress = data[0].address;
+                showMember(qaddress);
+                return;
+            } else {
+                show('memberanchor');
+                document.getElementById('memberanchor').innerHTML =  getSafeTranslation('pagingidnotfount','This paging id not found.');
+                return;
+            }
+        }, function (status) { //error detection....
+            showErrorMessage(status, 'messageslist', theURL);
+        });
+        return;
+    }
+
+    show('memberanchor');
     getAndPopulateMember(qaddress);
-    getAndPopulate(0, numbers.results, 'memberposts', qaddress);
-    document.getElementById('member').style.display = "block";
-    document.getElementById('memberfollow').style.display = "block";
-    document.getElementById('memberblock').style.display = "block";
+    getAndPopulateNew('new', 'all', '', '', 0, numbers.results, 'memberposts', qaddress);
+    document.getElementById('memberanchor').style.display = "block";
     document.getElementById('community').style.display = "block";
-    document.getElementById('ratings').style.display = "block";
+    document.getElementById('anchorratings').style.display = "block";
     document.getElementById('trustgraph').style.display = "block";
 }
 
@@ -228,13 +294,14 @@ function showTrustGraph(member, target) {
 }
 
 function showMemberPosts(start, limit, qaddress) {
-    getAndPopulate(start, limit, 'memberposts', qaddress);
+    //getAndPopulate(start, limit, 'memberposts', qaddress);
+    getAndPopulateNew('new', 'all', '', '', start, limit, 'memberposts', qaddress);
 }
 
 function showMessages(start, limit) {
     show("messagesanchor");
     getAndPopulateMessages(start, limit);
-}   
+}
 
 //These three should be refactored away
 function showFeed(start, limit, type) {
@@ -253,11 +320,12 @@ function showPFC(start, limit, page, pubkey, type) {
 }
 
 function showMyFeed() {
-    getAndPopulateNew('new', 'posts', 'myfeed', 'myfeed', 0, numbers.results, 'posts', pubkey);
+    setTopic('');
+    getAndPopulateNew('new', 'posts', 'myfeed', 'myfeed', 0, numbers.results, 'posts', '');
 }
 
-function showPostsNew(order, content, topicnameHOSTILE, filter, start, limit) {
-    getAndPopulateNew(order, content, topicnameHOSTILE, filter, start, limit, 'posts', pubkey);
+function showPostsNew(order, content, topicnameHOSTILE, filter, start, limit, qaddress) {
+    getAndPopulateNew(order, content, topicnameHOSTILE, filter, start, limit, 'posts', qaddress);
 }
 
 
@@ -265,8 +333,8 @@ function showPostsNew(order, content, topicnameHOSTILE, filter, start, limit) {
 function showTopic(start, limit, topicnameHOSTILE, type) {
     //Warning, topicname may contain hostile characters
     setTopic(topicnameHOSTILE);
-    if (type == "") type = "new";
-    getAndPopulateNew(type, 'posts', topicnameHOSTILE, 'everyone', start, limit, 'posts', pubkey);
+    if (!type) type = "new";
+    getAndPopulateNew(type, 'posts', topicnameHOSTILE, 'everyone', start, limit, 'posts', '');
     //getAndPopulate(start, limit, 'posts', pubkey, type, topicNameHOSTILE);
 }
 
@@ -277,6 +345,7 @@ function getCurrentTopicHOSTILE() {
 }
 
 function showTopicList() {
+    setTopic("");
     getAndPopulateTopicList(true);
 }
 
@@ -301,13 +370,16 @@ function postsSelectorChanged() {
     selector = document.getElementById('filterselector');
     var filter = selector.options[selector.selectedIndex].value;
 
-    //set the document location
-    document.location.href = "#show?order=" + order + "&content=" + content + "&topicname=" + encodeURIComponent(topicNameHOSTILE) + "&filter=" + filter + "&start=0&limit=" + Number(numbers.results);
+    //These two statements may trigger page load twice on firefox but not on other browsers
 
-    //topicChanged();
+    //set the document location without triggering the back/forward function
+    //assumeBackForwardEvent = false;
+    nlc();
+    document.location.hash = "#show?order=" + order + "&content=" + content + "&topicname=" + encodeURIComponent(topicNameHOSTILE) + "&filter=" + filter + "&start=0&limit=" + Number(numbers.results);
+    //setTimeout(function () { assumeBackForwardEvent = true; }, 100);
 
     //show the posts
-    displayContentBasedOnURLParameters();
+    //displayContentBasedOnURLParameters();
 }
 
 /*function exitTopic(){
@@ -332,7 +404,14 @@ function setTopic(topicNameHOSTILE) {
 
     if (topicNameHOSTILE == null || topicNameHOSTILE == "") {
         selector.selectedIndex = 0;
+        //hide("topicmeta");
         return;
+    }
+
+    if (topicNameHOSTILE.toLowerCase() == "myfeed" || topicNameHOSTILE.toLowerCase() == "mytopics") {
+        //hide("topicmeta");
+    } else {
+        getAndPopulateTopic(topicNameHOSTILE);
     }
 
     selector.selectedIndex = 1;
@@ -343,56 +422,117 @@ function setTopic(topicNameHOSTILE) {
 
 function showThread(roottxid, txid, articleStyle) {
     getAndPopulateThread(roottxid, txid, 'thread');
-    if (articleStyle) {
-        setAddonStyle("article.css");
+    if (articleStyle == "article") {
+        switchToArticleMode();
     }
 }
 
 function showFollowers(qaddress) {
-    getAndPopulateFollowers(qaddress);
+    getAndPopulateFB('followers',qaddress);
 }
 
 function showFollowing(qaddress) {
-    getAndPopulateFollowing(qaddress);
+    getAndPopulateFB('following',qaddress);
 }
 
 function showBlockers(qaddress) {
-    getAndPopulateBlockers(qaddress);
+    getAndPopulateFB('blockers',qaddress);
 }
 
 function showBlocking(qaddress) {
-    getAndPopulateBlocking(qaddress);
+    getAndPopulateFB('blocking',qaddress);
+
 }
 
 
 //suspend back/forward detection for map panning
 var suspendPageReload = false;
 
-var detectBackOrForward = function (onBack, onForward) {
-    //Note, sometimes onForward is being called even though it a regular navigation click event
-    let hashHistory = [window.location.hash];
-    let historyLength = window.history.length;
+let hashHistory = [window.location.hash];
+let historyLength = window.history.length;
 
-    return function () {
+var detectBackOrForward = function () {
 
-        var hash = window.location.hash, length = window.history.length;
-        if (hashHistory.length && historyLength == length) {
-            if (hashHistory[hashHistory.length - 2] == hash) {
-                hashHistory = hashHistory.slice(0, -1);
-                if (!suspendPageReload) onBack();
-            } else {
-                hashHistory.push(hash);
-                if (!suspendPageReload) onForward();
-            }
+    var hash = window.location.hash, length = window.history.length;
+    if (navlinkclicked) {
+        navlinkclicked = false;
+        //not a back/foward nav event
+        hashHistory.push(hash);
+        historyLength = length;
+        backForwardEvent = false;
+        if (!suspendPageReload) {
+            displayContentBasedOnURLParameters();
+        }
+        return true;
+    }
+    else{
+        //this is a back/foward nav event
+        backForwardEvent = true;
+        if (hashHistory[hashHistory.length - 2] == hash) {
+            hashHistory = hashHistory.slice(0, -1);
         } else {
             hashHistory.push(hash);
-            historyLength = length;
         }
+        if (!suspendPageReload){
+            displayContentBasedOnURLParameters();
+        }
+        return true;
+    } 
+}
+
+var scrollhistory = [];
+
+var navlinkclicked = false;
+function nlc() {
+    //navlinkclicked
+    navlinkclicked = true;
+}
+
+
+//Onhashchange is unreliable - try testing for location change 10 times a second
+var lastdocumentlocation = location.hash;
+
+setTimeout(testForHashChange, 100);
+function testForHashChange() {
+
+    if (lastdocumentlocation != location.hash || navlinkclicked) {
+        lastdocumentlocation = location.hash;
+        detectBackOrForward();
     }
-};
+    setTimeout(testForHashChange, 100);
+}
+var backForwardEvent=false;
 
-window.addEventListener("hashchange", detectBackOrForward(
-    function () { displayContentBasedOnURLParameters(); },
-    function () { displayContentBasedOnURLParameters(); /*This doesn't seem to work accurately if history is over 50*/ }
-));
+document.addEventListener("click", function () { scrollhistory[window.location.hash] = window.scrollY; }, true);
+document.getElementsByTagName('body')[0].onmouseleave = function () { scrollhistory[window.location.hash] = window.scrollY; }
 
+/*
+var assumeBackForwardEvent = true;
+window.onhashchange = function () {
+    if (assumeBackForwardEvent) {
+        //usually, but not always a result of back/forward click
+        window.innerDocClick = false;
+    }
+    assumeBackForwardEvent = true;
+}
+//record the scroll position
+
+
+//User's mouse is inside the page.
+document.getElementsByTagName('body')[0].onmouseover = function () { window.innerDocClick = true; }
+
+//User's mouse has left the page.
+document.getElementsByTagName('body')[0].onmouseleave = function () { window.innerDocClick = false; }
+*/
+
+function scrollToPosition(theElement) {
+    if (backForwardEvent) {
+        window.scrollTo(0, scrollhistory[window.location.hash]);
+    } else if (theElement) {
+        scrollToElement(theElement);
+    }
+    else {
+        window.scrollTo(0, 0);
+    }
+    backForwardEvent=false;
+}
